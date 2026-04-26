@@ -1,0 +1,59 @@
+{
+  "name": "@iqlabs-official/git-sdk",
+  "version": "0.1.1",
+  "description": "Embed on-chain Git into your Solana dApp. Browser SDK for letting users browse, create, and commit to repositories from your website, with a Node entry for tooling.",
+  "keywords": [
+    "solana",
+    "git",
+    "on-chain",
+    "iqlabs",
+    "iq-git",
+    "browser-sdk",
+    "wallet-adapter",
+    "dapp"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "./dist/node/index.js",
+    "./dist/browser/index.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^1.98.0",
+    "iqlabs-sdk": "^0.1.21",
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.98.0",
+    "@types/node": "^20.0.0",
+    "buffer": "^6.0.3",
+    "eslint": "^9.0.0",
+    "iqlabs-sdk": "npm:@iqlabs-official/solana-sdk@^0.1.21",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}
