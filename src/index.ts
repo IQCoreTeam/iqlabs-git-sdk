@@ -13,5 +13,5 @@ export * from "./core/seed";
 export { GitClient } from "./layers/client";
 export type { GitClientConfig, WriteEvent } from "./layers/client";
 export { bootstrapRegistry, readOwnerRepos, readRegistryPage } from "./layers/repo";
-export { readCommitHistory, readLatestCommit } from "./layers/commit";
-export { loadBlob, loadTree } from "./layers/storage";
+export { readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
+export { loadBlob, loadTree, uploadBlob, uploadTree } from "./layers/storage";
