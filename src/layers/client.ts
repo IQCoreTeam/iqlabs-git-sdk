@@ -7,6 +7,7 @@
 // orchestrates them all.
 
 import type { Connection } from "@solana/web3.js";
+import { setRpcUrl } from "@iqlabs-official/solana-sdk";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { sha256Hex } from "../core/hash";
 import { commitTableHint } from "../core/seed";
@@ -40,7 +41,15 @@ export interface GitClientConfig {
 
 export class GitClient {
   // CODE-RULES §3 — only one small shape; inlined rather than aliased.
-  constructor(private readonly cfg: GitClientConfig) {}
+  constructor(private readonly cfg: GitClientConfig) {
+    // The solana-sdk reader path (readTableRows / readCodeIn → loadTree /
+    // readLatestCommit) does not take a Connection — it resolves a
+    // process-global one from env / setRpcUrl. Writes use `cfg.connection`,
+    // so without this reads could hit a different RPC (e.g. the mainnet-beta
+    // fallback when no env is set, as in a built browser bundle). Sync the
+    // reader's RPC to the connection the caller actually gave us.
+    setRpcUrl(cfg.connection.rpcEndpoint);
+  }
 
   /**
    * Create a new repo. Wraps repo.createRepo + pre-creating the commit table
