@@ -12,6 +12,7 @@ import { createTable, writeRow } from "@iqlabs-official/solana-sdk/writer";
 import { IQGIT_ROOT_ID, REGISTRY_HINT, repoListHint } from "../core/seed";
 import type { RegistryEntry, Repository } from "../core/types";
 import * as chain from "./chain";
+import { notifyGateways } from "./gateway";
 
 const REPO_COLUMNS = ["name", "description", "isPublic", "timestamp"];
 const REGISTRY_COLUMNS = ["owner", "repo", "description", "timestamp"];
@@ -53,6 +54,7 @@ export async function createRepo(
 
   const sig = await writeRow(connection, signer, IQGIT_ROOT_ID, listHint, JSON.stringify(meta));
   writes.push({ tableHint: listHint, sig, row: meta });
+  notifyGateways(chain.tablePda(listHint).toBase58(), sig, meta, owner);
 
   if (meta.isPublic) {
     const entry: RegistryEntry = {
@@ -63,6 +65,7 @@ export async function createRepo(
     };
     const regSig = await writeRow(connection, signer, IQGIT_ROOT_ID, REGISTRY_HINT, JSON.stringify(entry));
     writes.push({ tableHint: REGISTRY_HINT, sig: regSig, row: entry });
+    notifyGateways(chain.tablePda(REGISTRY_HINT).toBase58(), regSig, entry, owner);
   }
 
   return writes;

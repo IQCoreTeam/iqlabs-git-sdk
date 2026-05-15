@@ -4,6 +4,10 @@
 // (chunk speed, root id, ...). Pure passthroughs like `createTable` /
 // `writeRow` live at the call site instead — wrapping them once more would
 // just bury the iqlabs-sdk surface (CODE-RULES §1).
+//
+// Read primitives transparently prefer the iq-gateway HTTP API and fall
+// back to direct RPC; the gateway dispatch lives here so commit/repo/
+// storage all benefit without each having to wire it up.
 
 import {
   Keypair,
@@ -18,10 +22,11 @@ import {
   getTablePda,
   initializeDbRootInstruction,
 } from "@iqlabs-official/solana-sdk/contract";
-import { readCodeIn, readTableRows } from "@iqlabs-official/solana-sdk/reader";
+import { readCodeIn as sdkReadCodeIn, readTableRows } from "@iqlabs-official/solana-sdk/reader";
 import { toSeedBytes, type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk/utils";
 import { codeIn as sdkCodeIn } from "@iqlabs-official/solana-sdk/writer";
 import { IQGIT_ROOT_ID } from "../core/seed";
+import { readCodeInViaGateway, readRowsViaGateway } from "./gateway";
 
 /** DbRoot PDA for the `iq-git-v1` namespace — derived once, reused everywhere. */
 export const DB_ROOT_SEED = toSeedBytes(IQGIT_ROOT_ID);
@@ -71,14 +76,18 @@ async function signTx(signer: SignerInput, tx: Transaction): Promise<Transaction
 }
 
 /**
- * Read rows from a table. Translates our hint into the PDA and forwards to
- * `iqlabs.reader.readTableRows`.
+ * Read rows from a table. Tries the iq-gateway HTTP cache first and falls
+ * back to `iqlabs.reader.readTableRows` on miss. Callers see a uniform API
+ * either way.
  */
 export async function readRows(
   hint: string,
   options?: { limit?: number; before?: string },
 ): Promise<Array<Record<string, unknown>>> {
-  return readTableRows(tablePda(hint), options);
+  const pda = tablePda(hint);
+  const viaGateway = await readRowsViaGateway(pda.toBase58(), options);
+  if (viaGateway !== null) return viaGateway;
+  return readTableRows(pda, options);
 }
 
 /**
@@ -117,7 +126,17 @@ export async function codeIn(
   );
 }
 
-export { readCodeIn };
+/**
+ * Read a codeIn payload by tx signature. Tries the gateway /data/:sig
+ * cache first and falls back to the SDK's direct RPC decode.
+ */
+export async function readCodeIn(
+  txSig: string,
+): Promise<{ data: string | null; metadata: string }> {
+  const viaGateway = await readCodeInViaGateway(txSig);
+  if (viaGateway !== null) return viaGateway;
+  return sdkReadCodeIn(txSig);
+}
 
 /** Cheap existence check for a PDA. */
 export async function accountExists(

@@ -15,3 +15,4 @@ export type { GitClientConfig, WriteEvent } from "./layers/client";
 export { bootstrapRegistry, readOwnerRepos, readRegistryPage } from "./layers/repo";
 export { readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
 export { loadBlob, loadTree, uploadBlob, uploadTree } from "./layers/storage";
+export { getGatewayUrls, setGatewayUrls, setNetwork } from "./layers/gateway";

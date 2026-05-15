@@ -11,6 +11,7 @@ import { createTable, writeRow } from "@iqlabs-official/solana-sdk/writer";
 import { IQGIT_ROOT_ID, commitTableHint } from "../core/seed";
 import type { Commit } from "../core/types";
 import * as chain from "./chain";
+import { notifyGateways } from "./gateway";
 
 const COMMIT_COLUMNS = [
   "id",
@@ -50,6 +51,10 @@ export async function ensureCommitTable(
 /**
  * Append one commit row. Callers (workflow-level code) are responsible for
  * setting parentCommitId — the SDK does not auto-chain.
+ *
+ * After the row lands on-chain, fires a best-effort /notify so any
+ * iq-gateway already caching this table prepends the new commit without
+ * waiting for RPC sig indexing.
  */
 export async function writeCommit(
   connection: Connection,
@@ -58,13 +63,16 @@ export async function writeCommit(
   commit: Commit,
 ): Promise<string> {
   const owner = signer.publicKey.toBase58();
-  return writeRow(
+  const hint = commitTableHint(owner, repo);
+  const sig = await writeRow(
     connection,
     signer,
     IQGIT_ROOT_ID,
-    commitTableHint(owner, repo),
+    hint,
     JSON.stringify(commit),
   );
+  notifyGateways(chain.tablePda(hint).toBase58(), sig, commit, owner);
+  return sig;
 }
 
 /** Latest commit. Single-row, O(1) RPC path. */
