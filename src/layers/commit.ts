@@ -5,7 +5,7 @@
 // "the most recent successful tx in this table = the latest commit", and we
 // read it as a single-row query (limit: 1).
 
-import type { Connection } from "@solana/web3.js";
+import type { Connection, PublicKey } from "@solana/web3.js";
 import { type SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { createTable, writeRow } from "@iqlabs-official/solana-sdk/writer";
 import { IQGIT_ROOT_ID, commitTableHint } from "../core/seed";
@@ -93,5 +93,18 @@ export async function readCommitHistory(
   options?: { limit?: number; before?: string },
 ): Promise<Commit[]> {
   const rows = await chain.readRows(commitTableHint(owner, repo), options);
+  return rows as unknown as Commit[];
+}
+
+/**
+ * Commit history keyed by the commit-table PDA directly — for callers that
+ * resolved a repo to its PDA (e.g. via a .sol record) and don't have the
+ * owner/repo to rebuild the hint.
+ */
+export async function readCommitHistoryByPda(
+  pda: PublicKey,
+  options?: { limit?: number; before?: string },
+): Promise<Commit[]> {
+  const rows = await chain.readRowsByPda(pda, options);
   return rows as unknown as Commit[];
 }

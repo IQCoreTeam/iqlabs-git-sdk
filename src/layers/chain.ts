@@ -84,7 +84,18 @@ export async function readRows(
   hint: string,
   options?: { limit?: number; before?: string },
 ): Promise<Array<Record<string, unknown>>> {
-  const pda = tablePda(hint);
+  return readRowsByPda(tablePda(hint), options);
+}
+
+/**
+ * Same as readRows but keyed by the table PDA directly — for callers that
+ * already have the PDA (e.g. a .sol record pointing at a commit table) and
+ * can't or shouldn't re-derive it from a hint.
+ */
+export async function readRowsByPda(
+  pda: PublicKey,
+  options?: { limit?: number; before?: string },
+): Promise<Array<Record<string, unknown>>> {
   const viaGateway = await readRowsViaGateway(pda.toBase58(), options);
   if (viaGateway !== null) return viaGateway;
   return readTableRows(pda, options);
