@@ -75,33 +75,21 @@ export async function writeCommit(
   return sig;
 }
 
+/** The commit-table PDA for a repo. The one place owner/repo collapses to a
+ *  PDA — every read keys off the PDA, so callers that have a PDA already (a
+ *  .sol record, a dbroot match) skip this and pass it straight in. */
+export function commitTablePda(owner: string, repo: string): PublicKey {
+  return chain.tablePda(commitTableHint(owner, repo));
+}
+
 /** Latest commit. Single-row, O(1) RPC path. */
-export async function readLatestCommit(
-  _connection: Connection,
-  owner: string,
-  repo: string,
-): Promise<Commit | null> {
-  const row = await chain.readLatestRow(commitTableHint(owner, repo));
-  return row as unknown as Commit | null;
+export async function readLatestCommit(pda: PublicKey): Promise<Commit | null> {
+  const rows = await chain.readRowsByPda(pda, { limit: 1 });
+  return (rows[0] as unknown as Commit) ?? null;
 }
 
 /** Full commit history, newest first. */
 export async function readCommitHistory(
-  _connection: Connection,
-  owner: string,
-  repo: string,
-  options?: { limit?: number; before?: string },
-): Promise<Commit[]> {
-  const rows = await chain.readRows(commitTableHint(owner, repo), options);
-  return rows as unknown as Commit[];
-}
-
-/**
- * Commit history keyed by the commit-table PDA directly — for callers that
- * resolved a repo to its PDA (e.g. via a .sol record) and don't have the
- * owner/repo to rebuild the hint.
- */
-export async function readCommitHistoryByPda(
   pda: PublicKey,
   options?: { limit?: number; before?: string },
 ): Promise<Commit[]> {

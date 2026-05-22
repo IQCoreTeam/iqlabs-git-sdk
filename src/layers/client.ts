@@ -77,7 +77,7 @@ export class GitClient {
     const { connection, signer } = this.cfg;
     const owner = signer.publicKey.toBase58();
 
-    const latest = await commitLayer.readLatestCommit(connection, owner, repoName);
+    const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
     const oldTree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
 
     const newTree: FileTree = {};
@@ -131,11 +131,12 @@ export class GitClient {
     const { connection, signer } = this.cfg;
     const owner = signer.publicKey.toBase58();
 
+    const pda = commitLayer.commitTablePda(owner, repoName);
     let target: Commit | null;
     if (commitId === "latest") {
-      target = await commitLayer.readLatestCommit(connection, owner, repoName);
+      target = await commitLayer.readLatestCommit(pda);
     } else {
-      const history = await commitLayer.readCommitHistory(connection, owner, repoName);
+      const history = await commitLayer.readCommitHistory(pda);
       target = history.find((c) => c.id === commitId) ?? null;
     }
     if (!target) {
@@ -160,8 +161,7 @@ export class GitClient {
     owner: string,
     sink: (path: string, content: string) => Promise<void>,
   ): Promise<Commit> {
-    const { connection } = this.cfg;
-    const target = await commitLayer.readLatestCommit(connection, owner, repoName);
+    const target = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
     if (!target) {
       throw new Error(`no commits in ${owner}/${repoName}`);
     }
@@ -179,12 +179,7 @@ export class GitClient {
     repoName: string,
     options?: { limit?: number; before?: string },
   ): Promise<Commit[]> {
-    return commitLayer.readCommitHistory(
-      this.cfg.connection,
-      owner,
-      repoName,
-      options,
-    );
+    return commitLayer.readCommitHistory(commitLayer.commitTablePda(owner, repoName), options);
   }
 
   /**
@@ -195,11 +190,7 @@ export class GitClient {
     repoName: string,
     scan: Record<string, string>,
   ): Promise<{ added: string[]; modified: string[]; unchanged: string[] }> {
-    const latest = await commitLayer.readLatestCommit(
-      this.cfg.connection,
-      owner,
-      repoName,
-    );
+    const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
     const tree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
 
     const added: string[] = [];
