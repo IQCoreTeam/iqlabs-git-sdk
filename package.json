@@ -1,6 +1,6 @@
 {
   "name": "@iqlabs-official/git-sdk",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Embed on-chain Git into your Solana dApp. Browser SDK for letting users browse, create, and commit to repositories from your website, with a Node entry for tooling.",
   "keywords": [
     "solana",
