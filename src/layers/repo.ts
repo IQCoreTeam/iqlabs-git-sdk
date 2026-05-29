@@ -39,7 +39,7 @@ export async function createRepo(
   if (!(await chain.accountExists(connection, chain.tablePda(listHint)))) {
     await createTable(
       connection,
-      signer as never,
+      signer,
       IQGIT_ROOT_ID,
       listHint,
       listHint,
@@ -106,7 +106,7 @@ export async function bootstrapRegistry(
   }
   return createTable(
     connection,
-    signer as never,
+    signer,
     IQGIT_ROOT_ID,
     REGISTRY_HINT,
     REGISTRY_HINT,

@@ -35,7 +35,7 @@ export async function ensureCommitTable(
   if (await chain.accountExists(connection, chain.tablePda(hint))) return null;
   return createTable(
     connection,
-    signer as never,
+    signer,
     IQGIT_ROOT_ID,
     hint,
     hint,
