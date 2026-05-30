@@ -29,6 +29,7 @@ export async function uploadBlob(
   base64Content: string,
   reuse: FileTree,
   onProgress?: (percent: number) => void,
+  speed?: chain.SessionSpeed,
 ): Promise<{ txId: string; hash: string }> {
   const hash = await sha256Hex(base64Content);
   const prior = reuse[relativePath];
@@ -46,6 +47,7 @@ export async function uploadBlob(
     `iqgit-blob:${basename}`,
     "application/octet-stream",
     onProgress,
+    speed,
   );
   return { txId, hash };
 }
@@ -57,6 +59,7 @@ export async function uploadTree(
   connection: Connection,
   signer: SignerInput,
   tree: FileTree,
+  speed?: chain.SessionSpeed,
 ): Promise<string> {
   return chain.codeIn(
     connection,
@@ -64,6 +67,8 @@ export async function uploadTree(
     JSON.stringify(tree),
     "iqgit-tree",
     "application/json",
+    undefined,
+    speed,
   );
 }
 

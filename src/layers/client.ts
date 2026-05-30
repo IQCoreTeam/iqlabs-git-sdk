@@ -37,6 +37,10 @@ export interface GitClientConfig {
   /** Fires after each successful row write inside the SDK. Fire-and-forget
    *  callback for gateway notifies; throwing here will surface to the caller. */
   onWrite?: (event: WriteEvent) => void;
+  /** Default solana-sdk session speed for blob / tree uploads (`"light"` is
+   *  the per-operation default and works well on Helius free-tier RPCs).
+   *  Override per call with `commit({ speed })`. See `SESSION_SPEED_PROFILES`. */
+  speed?: chain.SessionSpeed;
 }
 
 export class GitClient {
@@ -73,9 +77,11 @@ export class GitClient {
     repoName: string,
     message: string,
     scan: Record<string, string>,
+    options?: { speed?: chain.SessionSpeed },
   ): Promise<Commit> {
     const { connection, signer } = this.cfg;
     const owner = signer.publicKey.toBase58();
+    const speed = options?.speed ?? this.cfg.speed;
 
     const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
     const oldTree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
@@ -88,10 +94,12 @@ export class GitClient {
         path,
         content,
         oldTree,
+        undefined,
+        speed,
       );
     }
 
-    const treeTxId = await storage.uploadTree(connection, signer, newTree);
+    const treeTxId = await storage.uploadTree(connection, signer, newTree, speed);
 
     const commit: Commit = {
       id: crypto.randomUUID(),

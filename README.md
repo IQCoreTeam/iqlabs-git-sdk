@@ -65,6 +65,28 @@ await client.commit("my-repo", "initial", scan);
 
 `SignerInput` from `@iqlabs-official/solana-sdk` is accepted everywhere a signer is needed: a `Keypair`, a web3.js `Signer`, or a wallet adapter object with `signTransaction` / `signAllTransactions`.
 
+## Tuning upload speed
+
+Blob and tree uploads forward to `iqlabs.writer.codeIn`, which picks RPS and concurrency from a `SESSION_SPEED_PROFILES` preset. The git-sdk default is `"light"` (Helius free-tier friendly). Override per client or per call:
+
+```ts
+const client = new GitClient({ connection, signer, speed: "heavy" });
+
+// Or per call (overrides the client-level default):
+await client.commit("my-repo", "tweak", scan, { speed: "extreme" });
+```
+
+For custom RPS / concurrency, mutate the profile before constructing the client:
+
+```ts
+import { SESSION_SPEED_PROFILES } from "@iqlabs-official/git-sdk";
+
+SESSION_SPEED_PROFILES.heavy.maxRps = 200;
+SESSION_SPEED_PROFILES.heavy.maxConcurrencyUpload = 80;
+```
+
+Available presets: `light` | `medium` | `heavy` | `extreme`. See the [solana-sdk docs](https://iqlabs.mintlify.app/docs-typescript#session-speed) for the exact RPS/concurrency values.
+
 ## Subpath entries
 
 | Import | When to use |

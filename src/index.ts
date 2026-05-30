@@ -16,3 +16,12 @@ export { bootstrapRegistry, readOwnerRepos, readRegistryPage } from "./layers/re
 export { commitTablePda, readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
 export { loadBlob, loadTree, uploadBlob, uploadTree } from "./layers/storage";
 export { getGatewayUrls, setGatewayUrls, setNetwork } from "./layers/gateway";
+export type { SessionSpeed } from "./layers/chain";
+
+// Re-export the solana-sdk speed dial so consumers can tune RPS / concurrency
+// for their RPC tier without importing both SDKs.
+export {
+  SESSION_SPEED_PROFILES,
+  DEFAULT_SESSION_SPEED,
+  resolveSessionSpeed,
+} from "@iqlabs-official/solana-sdk/utils";

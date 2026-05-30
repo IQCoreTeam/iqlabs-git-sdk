@@ -113,6 +113,13 @@ export async function readLatestRow(
 }
 
 /**
+ * Speed presets forwarded to `iqlabs.writer.codeIn`. Matches the solana-sdk
+ * `SESSION_SPEED_PROFILES` keys, re-exported here as `SessionSpeed` so
+ * consumers don't have to import both SDKs to pick a value.
+ */
+export type SessionSpeed = "light" | "medium" | "heavy" | "extreme";
+
+/**
  * Upload a blob via `iqlabs.writer.codeIn`. The SDK chunks internally when
  * `data` is a plain string. We default speed to "light" because that's the
  * Helius-friendly setting for git workloads (per-file uploads are bursty).
@@ -124,7 +131,7 @@ export async function codeIn(
   filename: string,
   filetype: string,
   onProgress?: (percent: number) => void,
-  speed: "light" | "medium" | "fast" = "light",
+  speed: SessionSpeed = "light",
 ): Promise<string> {
   return sdkCodeIn(
     { connection, signer },
