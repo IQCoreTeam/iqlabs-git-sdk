@@ -23,7 +23,12 @@ import {
   initializeDbRootInstruction,
 } from "@iqlabs-official/solana-sdk/contract";
 import { readCodeIn as sdkReadCodeIn, readTableRows } from "@iqlabs-official/solana-sdk/reader";
-import { toSeedBytes, type SignerInput, type WalletSigner } from "@iqlabs-official/solana-sdk/utils";
+import {
+  toSeedBytes,
+  type SessionSpeedOption,
+  type SignerInput,
+  type WalletSigner,
+} from "@iqlabs-official/solana-sdk/utils";
 import { codeIn as sdkCodeIn } from "@iqlabs-official/solana-sdk/writer";
 import { IQGIT_ROOT_ID } from "../core/seed";
 import { readCodeInViaGateway, readRowsViaGateway } from "./gateway";
@@ -113,11 +118,15 @@ export async function readLatestRow(
 }
 
 /**
- * Speed presets forwarded to `iqlabs.writer.codeIn`. Matches the solana-sdk
- * `SESSION_SPEED_PROFILES` keys, re-exported here as `SessionSpeed` so
- * consumers don't have to import both SDKs to pick a value.
+ * Speed forwarded to `iqlabs.writer.codeIn`. Either a preset name
+ * (`"light" | "medium" | "heavy" | "extreme"`) or a raw override object —
+ * `{ maxRps?, maxConcurrency?, maxConcurrencyUpload? }` — when you want to
+ * dial RPS / concurrency directly without picking a preset.
+ *
+ * Re-exported here so consumers don't have to import both SDKs to pick a
+ * value. See solana-sdk's `SessionSpeedOption` for the full type.
  */
-export type SessionSpeed = "light" | "medium" | "heavy" | "extreme";
+export type SessionSpeed = SessionSpeedOption;
 
 /**
  * Upload a blob via `iqlabs.writer.codeIn`. The SDK chunks internally when

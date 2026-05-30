@@ -67,25 +67,28 @@ await client.commit("my-repo", "initial", scan);
 
 ## Tuning upload speed
 
-Blob and tree uploads forward to `iqlabs.writer.codeIn`, which picks RPS and concurrency from a `SESSION_SPEED_PROFILES` preset. The git-sdk default is `"light"` (Helius free-tier friendly). Override per client or per call:
+Blob and tree uploads forward to `iqlabs.writer.codeIn`, which sets RPS and concurrency from a `SESSION_SPEED_PROFILES` preset. The git-sdk default is `"light"` (Helius free-tier friendly). You can either pick a preset or pass raw dials:
 
 ```ts
+// 1. Pick a preset name.
 const client = new GitClient({ connection, signer, speed: "heavy" });
 
-// Or per call (overrides the client-level default):
+// 2. Or override raw RPS / concurrency directly. Missing keys fall back
+//    to the default preset values.
+const client = new GitClient({
+  connection,
+  signer,
+  speed: { maxRps: 80, maxConcurrencyUpload: 30 },
+});
+
+// Per-call override (wins over the client-level default):
 await client.commit("my-repo", "tweak", scan, { speed: "extreme" });
+await client.commit("my-repo", "tweak", scan, {
+  speed: { maxRps: 120, maxConcurrencyUpload: 40 },
+});
 ```
 
-For custom RPS / concurrency, mutate the profile before constructing the client:
-
-```ts
-import { SESSION_SPEED_PROFILES } from "@iqlabs-official/git-sdk";
-
-SESSION_SPEED_PROFILES.heavy.maxRps = 200;
-SESSION_SPEED_PROFILES.heavy.maxConcurrencyUpload = 80;
-```
-
-Available presets: `light` | `medium` | `heavy` | `extreme`. See the [solana-sdk docs](https://iqlabs.mintlify.app/docs-typescript#session-speed) for the exact RPS/concurrency values.
+Available presets: `light` | `medium` | `heavy` | `extreme`. The raw object accepts `maxRps`, `maxConcurrency`, `maxConcurrencyUpload`. See the [solana-sdk docs](https://iqlabs.mintlify.app/docs-typescript#session-speed) for the preset values.
 
 ## Subpath entries
 
