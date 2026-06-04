@@ -10,7 +10,6 @@
 // `uploadTree` / `loadTree` serialize FileTree <-> on-chain tree.json as raw
 // JSON (filetype `application/json`), again matching v1.
 
-import type { Connection } from "@solana/web3.js";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { sha256Hex } from "../core/hash";
 import type { FileTree } from "../core/types";
@@ -23,7 +22,6 @@ import * as chain from "./chain";
  * output: { txId, hash } — either reused or freshly uploaded
  */
 export async function uploadBlob(
-  connection: Connection,
   signer: SignerInput,
   relativePath: string,
   base64Content: string,
@@ -41,7 +39,6 @@ export async function uploadBlob(
   // for trees ("iqgit-tree") and other writes across the IQ ecosystem.
   const basename = relativePath.split("/").pop() || relativePath;
   const txId = await chain.codeIn(
-    connection,
     signer,
     base64Content,
     `iqgit-blob:${basename}`,
@@ -56,13 +53,11 @@ export async function uploadBlob(
  * Serialize a FileTree and upload it as one `tree.json` blob.
  */
 export async function uploadTree(
-  connection: Connection,
   signer: SignerInput,
   tree: FileTree,
   speed?: chain.SessionSpeed,
 ): Promise<string> {
   return chain.codeIn(
-    connection,
     signer,
     JSON.stringify(tree),
     "iqgit-tree",

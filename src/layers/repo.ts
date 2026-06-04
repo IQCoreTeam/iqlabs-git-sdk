@@ -6,10 +6,8 @@
 //
 // Commit tables are a separate concern — see `commit.ts`.
 
-import type { Connection } from "@solana/web3.js";
 import { type SignerInput } from "@iqlabs-official/solana-sdk/utils";
-import { createTable, writeRow } from "@iqlabs-official/solana-sdk/writer";
-import { IQGIT_ROOT_ID, REGISTRY_HINT, repoListHint } from "../core/seed";
+import { REGISTRY_HINT, repoListHint } from "../core/seed";
 import type { RegistryEntry, Repository } from "../core/types";
 import * as chain from "./chain";
 import { notifyGateways } from "./gateway";
@@ -28,7 +26,6 @@ const REGISTRY_COLUMNS = ["owner", "repo", "description", "timestamp"];
  * a row, just allocate the account.
  */
 export async function createRepo(
-  connection: Connection,
   signer: SignerInput,
   meta: Repository,
 ): Promise<Array<{ tableHint: string; sig: string; row: object }>> {
@@ -36,25 +33,13 @@ export async function createRepo(
   const listHint = repoListHint(owner);
   const writes: Array<{ tableHint: string; sig: string; row: object }> = [];
 
-  if (!(await chain.accountExists(connection, chain.tablePda(listHint)))) {
-    await createTable(
-      connection,
-      signer,
-      IQGIT_ROOT_ID,
-      listHint,
-      listHint,
-      REPO_COLUMNS,
-      "name",
-      [],
-      undefined,
-      [signer.publicKey],
-      listHint,
-    );
+  if (!(await chain.tableExists(listHint))) {
+    await chain.createTable(signer, listHint, REPO_COLUMNS, "name", { writers: [owner] });
   }
 
-  const sig = await writeRow(connection, signer, IQGIT_ROOT_ID, listHint, JSON.stringify(meta));
+  const sig = await chain.writeRow(signer, listHint, JSON.stringify(meta));
   writes.push({ tableHint: listHint, sig, row: meta });
-  notifyGateways(chain.tablePda(listHint).toBase58(), sig, meta, owner);
+  notifyGateways(chain.tableKey(listHint), sig, meta, owner);
 
   if (meta.isPublic) {
     const entry: RegistryEntry = {
@@ -63,19 +48,16 @@ export async function createRepo(
       description: meta.description,
       timestamp: meta.timestamp,
     };
-    const regSig = await writeRow(connection, signer, IQGIT_ROOT_ID, REGISTRY_HINT, JSON.stringify(entry));
+    const regSig = await chain.writeRow(signer, REGISTRY_HINT, JSON.stringify(entry));
     writes.push({ tableHint: REGISTRY_HINT, sig: regSig, row: entry });
-    notifyGateways(chain.tablePda(REGISTRY_HINT).toBase58(), regSig, entry, owner);
+    notifyGateways(chain.tableKey(REGISTRY_HINT), regSig, entry, owner);
   }
 
   return writes;
 }
 
 /** List all repos owned by `owner`. */
-export async function readOwnerRepos(
-  _connection: Connection,
-  owner: string,
-): Promise<Repository[]> {
+export async function readOwnerRepos(owner: string): Promise<Repository[]> {
   return (await chain.readRows(repoListHint(owner))) as unknown as Repository[];
 }
 
@@ -85,7 +67,6 @@ export async function readOwnerRepos(
  * boundary.
  */
 export async function readRegistryPage(
-  _connection: Connection,
   options?: { limit?: number; before?: string },
 ): Promise<RegistryEntry[]> {
   return (await chain.readRows(REGISTRY_HINT, options)) as unknown as RegistryEntry[];
@@ -96,25 +77,11 @@ export async function readRegistryPage(
  * network from an admin key; subsequent calls short-circuit because the
  * account already exists.
  */
-export async function bootstrapRegistry(
-  connection: Connection,
-  signer: SignerInput,
-): Promise<string | null> {
-  await chain.ensureDbRoot(connection, signer);
-  if (await chain.accountExists(connection, chain.tablePda(REGISTRY_HINT))) {
+export async function bootstrapRegistry(signer: SignerInput): Promise<string | null> {
+  await chain.ensureDbRoot(signer);
+  if (await chain.tableExists(REGISTRY_HINT)) {
     return null;
   }
-  return createTable(
-    connection,
-    signer,
-    IQGIT_ROOT_ID,
-    REGISTRY_HINT,
-    REGISTRY_HINT,
-    REGISTRY_COLUMNS,
-    "owner",
-    [],
-    undefined,
-    undefined,
-    REGISTRY_HINT,
-  );
+  // No `writers` ⇒ open table: anyone can register a public repo.
+  return chain.createTable(signer, REGISTRY_HINT, REGISTRY_COLUMNS, "owner");
 }

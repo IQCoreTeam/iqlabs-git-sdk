@@ -42,16 +42,18 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@solana/web3.js": "^1.98.0",
     "@iqlabs-official/solana-sdk": "^0.1.27",
+    "@solana/web3.js": "^1.98.0",
     "buffer": "^6.0.3"
   },
   "devDependencies": {
-    "@solana/web3.js": "^1.98.0",
+    "@iqlabs-official/ethereum-sdk": "file:../iq-ethereum-sdk",
     "@iqlabs-official/solana-sdk": "^0.1.27",
+    "@solana/web3.js": "^1.98.0",
     "@types/node": "^20.0.0",
     "buffer": "^6.0.3",
     "eslint": "^9.0.0",
+    "ethers": "^6.16.0",
     "tsup": "^8.0.0",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"

@@ -13,6 +13,7 @@ import { sha256Hex } from "../core/hash";
 import { commitTableHint } from "../core/seed";
 import type { Commit, FileTree, Repository } from "../core/types";
 import * as chain from "./chain";
+import { initChain, setChain } from "./chain";
 import * as commitLayer from "./commit";
 import * as repoLayer from "./repo";
 import * as storage from "./storage";
@@ -46,6 +47,10 @@ export interface GitClientConfig {
 export class GitClient {
   // CODE-RULES §3 — only one small shape; inlined rather than aliased.
   constructor(private readonly cfg: GitClientConfig) {
+    // Solana is the active chain for this client (EVM clients arrive in
+    // Phase 2's discriminated config). Wire the adapter's Connection once.
+    setChain("solana");
+    initChain({ chain: "solana", connection: cfg.connection });
     // The solana-sdk reader path (readTableRows / readCodeIn → loadTree /
     // readLatestCommit) does not take a Connection — it resolves a
     // process-global one from env / setRpcUrl. Writes use `cfg.connection`,
@@ -60,9 +65,9 @@ export class GitClient {
    * so the first `commit()` call doesn't need to pay createTable cost.
    */
   async createRepo(meta: Repository): Promise<void> {
-    const { connection, signer } = this.cfg;
-    const writes = await repoLayer.createRepo(connection, signer, meta);
-    await commitLayer.ensureCommitTable(connection, signer, meta.name);
+    const { signer } = this.cfg;
+    const writes = await repoLayer.createRepo(signer, meta);
+    await commitLayer.ensureCommitTable(signer, meta.name);
     this.fireOnWrite(writes);
   }
 
@@ -79,17 +84,16 @@ export class GitClient {
     scan: Record<string, string>,
     options?: { speed?: chain.SessionSpeed },
   ): Promise<Commit> {
-    const { connection, signer } = this.cfg;
+    const { signer } = this.cfg;
     const owner = signer.publicKey.toBase58();
     const speed = options?.speed ?? this.cfg.speed;
 
-    const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
+    const latest = await commitLayer.readLatestCommit(commitLayer.commitTableRef(owner, repoName));
     const oldTree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
 
     const newTree: FileTree = {};
     for (const [path, content] of Object.entries(scan)) {
       newTree[path] = await storage.uploadBlob(
-        connection,
         signer,
         path,
         content,
@@ -99,7 +103,7 @@ export class GitClient {
       );
     }
 
-    const treeTxId = await storage.uploadTree(connection, signer, newTree, speed);
+    const treeTxId = await storage.uploadTree(signer, newTree, speed);
 
     const commit: Commit = {
       id: crypto.randomUUID(),
@@ -109,7 +113,7 @@ export class GitClient {
       timestamp: Date.now(),
       author: owner,
     };
-    const sig = await commitLayer.writeCommit(connection, signer, repoName, commit);
+    const sig = await commitLayer.writeCommit(signer, repoName, commit);
     this.fireOnWrite([{ tableHint: commitTableHint(owner, repoName), sig, row: commit }]);
     return commit;
   }
@@ -120,7 +124,7 @@ export class GitClient {
   private fireOnWrite(writes: Array<{ tableHint: string; sig: string; row: object }>) {
     if (!this.cfg.onWrite) return;
     for (const w of writes) {
-      const tablePda = chain.tablePda(w.tableHint).toBase58();
+      const tablePda = chain.tableKey(w.tableHint);
       this.cfg.onWrite({ tablePda, tableHint: w.tableHint, sig: w.sig, row: w.row });
     }
   }
@@ -136,15 +140,15 @@ export class GitClient {
     commitId: string | "latest",
     sink: (path: string, content: string) => Promise<void>,
   ): Promise<Commit> {
-    const { connection, signer } = this.cfg;
+    const { signer } = this.cfg;
     const owner = signer.publicKey.toBase58();
 
-    const pda = commitLayer.commitTablePda(owner, repoName);
+    const ref = commitLayer.commitTableRef(owner, repoName);
     let target: Commit | null;
     if (commitId === "latest") {
-      target = await commitLayer.readLatestCommit(pda);
+      target = await commitLayer.readLatestCommit(ref);
     } else {
-      const history = await commitLayer.readCommitHistory(pda);
+      const history = await commitLayer.readCommitHistory(ref);
       target = history.find((c) => c.id === commitId) ?? null;
     }
     if (!target) {
@@ -169,7 +173,7 @@ export class GitClient {
     owner: string,
     sink: (path: string, content: string) => Promise<void>,
   ): Promise<Commit> {
-    const target = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
+    const target = await commitLayer.readLatestCommit(commitLayer.commitTableRef(owner, repoName));
     if (!target) {
       throw new Error(`no commits in ${owner}/${repoName}`);
     }
@@ -187,7 +191,7 @@ export class GitClient {
     repoName: string,
     options?: { limit?: number; before?: string },
   ): Promise<Commit[]> {
-    return commitLayer.readCommitHistory(commitLayer.commitTablePda(owner, repoName), options);
+    return commitLayer.readCommitHistory(commitLayer.commitTableRef(owner, repoName), options);
   }
 
   /**
@@ -198,7 +202,7 @@ export class GitClient {
     repoName: string,
     scan: Record<string, string>,
   ): Promise<{ added: string[]; modified: string[]; unchanged: string[] }> {
-    const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
+    const latest = await commitLayer.readLatestCommit(commitLayer.commitTableRef(owner, repoName));
     const tree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
 
     const added: string[] = [];
