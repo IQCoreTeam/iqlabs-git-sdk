@@ -10,10 +10,10 @@
 // `uploadTree` / `loadTree` serialize FileTree <-> on-chain tree.json as raw
 // JSON (filetype `application/json`), again matching v1.
 
-import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { sha256Hex } from "../core/hash";
 import type { FileTree } from "../core/types";
 import * as chain from "./chain";
+import type { GitSigner } from "./chain";
 
 /**
  * Upload one file unless an identical hash is already in `reuse` (blob dedup).
@@ -22,7 +22,7 @@ import * as chain from "./chain";
  * output: { txId, hash } — either reused or freshly uploaded
  */
 export async function uploadBlob(
-  signer: SignerInput,
+  signer: GitSigner,
   relativePath: string,
   base64Content: string,
   reuse: FileTree,
@@ -53,7 +53,7 @@ export async function uploadBlob(
  * Serialize a FileTree and upload it as one `tree.json` blob.
  */
 export async function uploadTree(
-  signer: SignerInput,
+  signer: GitSigner,
   tree: FileTree,
   speed?: chain.SessionSpeed,
 ): Promise<string> {

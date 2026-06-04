@@ -91,6 +91,13 @@ export interface ChainOps {
   readRowsByRef(ref: TableRef, options?: ReadOptions): Promise<Row[]>;
   readLatestRow(hint: string): Promise<Row | null>;
 
+  // ---- signer ----
+
+  /** The signer's on-chain address — Solana base58 pubkey / EVM `0x` address.
+   *  Async because ethers resolves the address over the provider. This is the
+   *  `owner` that hint derivation (commit / repo-list tables) keys off. */
+  signerAddress(signer: GitSigner): Promise<string>;
+
   // ---- table writes ----
 
   /** Initialize the `iq-git-v1` DbRoot if absent. Null when already present. */

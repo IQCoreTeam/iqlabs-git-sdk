@@ -81,6 +81,10 @@ export function readLatestRow(hint: string): Promise<Row | null> {
   return active.readLatestRow(hint);
 }
 
+export function signerAddress(signer: GitSigner): Promise<string> {
+  return active.signerAddress(signer);
+}
+
 export function ensureDbRoot(signer: GitSigner): Promise<string | null> {
   return active.ensureDbRoot(signer);
 }

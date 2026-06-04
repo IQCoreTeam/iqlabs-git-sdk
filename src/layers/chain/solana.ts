@@ -143,6 +143,10 @@ export const solanaAdapter: ChainOps = {
     return rows[0] ?? null;
   },
 
+  async signerAddress(signer: GitSigner): Promise<string> {
+    return asSolana(signer).publicKey.toBase58();
+  },
+
   async ensureDbRoot(signer: GitSigner): Promise<string | null> {
     const s = asSolana(signer);
     if (await accountExists(DB_ROOT)) return null;

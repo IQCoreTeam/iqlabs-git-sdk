@@ -80,6 +80,10 @@ export const ethAdapter: ChainOps = {
     return rows[0] ?? null;
   },
 
+  async signerAddress(signer: GitSigner): Promise<string> {
+    return asEth(signer).getAddress();
+  },
+
   async ensureDbRoot(signer: GitSigner): Promise<string | null> {
     // Idempotent at the SDK level — a revert (already initialized) maps to null.
     try {

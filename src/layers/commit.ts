@@ -5,11 +5,10 @@
 // "the most recent successful tx in this table = the latest commit", and we
 // read it as a single-row query (limit: 1).
 
-import { type SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { commitTableHint } from "../core/seed";
 import type { Commit } from "../core/types";
 import * as chain from "./chain";
-import type { TableRef } from "./chain";
+import type { GitSigner, TableRef } from "./chain";
 import { notifyGateways } from "./gateway";
 
 const COMMIT_COLUMNS = [
@@ -26,10 +25,10 @@ const COMMIT_COLUMNS = [
  * it already exists.
  */
 export async function ensureCommitTable(
-  signer: SignerInput,
+  signer: GitSigner,
   repo: string,
 ): Promise<string | null> {
-  const owner = signer.publicKey.toBase58();
+  const owner = await chain.signerAddress(signer);
   const hint = commitTableHint(owner, repo);
   if (await chain.tableExists(hint)) return null;
   return chain.createTable(signer, hint, COMMIT_COLUMNS, "id", { writers: [owner] });
@@ -44,11 +43,11 @@ export async function ensureCommitTable(
  * waiting for RPC sig indexing.
  */
 export async function writeCommit(
-  signer: SignerInput,
+  signer: GitSigner,
   repo: string,
   commit: Commit,
 ): Promise<string> {
-  const owner = signer.publicKey.toBase58();
+  const owner = await chain.signerAddress(signer);
   const hint = commitTableHint(owner, repo);
   const sig = await chain.writeRow(signer, hint, JSON.stringify(commit));
   notifyGateways(chain.tableKey(hint), sig, commit, owner);

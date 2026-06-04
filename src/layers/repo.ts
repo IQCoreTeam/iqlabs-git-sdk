@@ -6,10 +6,10 @@
 //
 // Commit tables are a separate concern — see `commit.ts`.
 
-import { type SignerInput } from "@iqlabs-official/solana-sdk/utils";
 import { REGISTRY_HINT, repoListHint } from "../core/seed";
 import type { RegistryEntry, Repository } from "../core/types";
 import * as chain from "./chain";
+import type { GitSigner } from "./chain";
 import { notifyGateways } from "./gateway";
 
 const REPO_COLUMNS = ["name", "description", "isPublic", "timestamp"];
@@ -26,10 +26,10 @@ const REGISTRY_COLUMNS = ["owner", "repo", "description", "timestamp"];
  * a row, just allocate the account.
  */
 export async function createRepo(
-  signer: SignerInput,
+  signer: GitSigner,
   meta: Repository,
 ): Promise<Array<{ tableHint: string; sig: string; row: object }>> {
-  const owner = signer.publicKey.toBase58();
+  const owner = await chain.signerAddress(signer);
   const listHint = repoListHint(owner);
   const writes: Array<{ tableHint: string; sig: string; row: object }> = [];
 
@@ -77,7 +77,7 @@ export async function readRegistryPage(
  * network from an admin key; subsequent calls short-circuit because the
  * account already exists.
  */
-export async function bootstrapRegistry(signer: SignerInput): Promise<string | null> {
+export async function bootstrapRegistry(signer: GitSigner): Promise<string | null> {
   await chain.ensureDbRoot(signer);
   if (await chain.tableExists(REGISTRY_HINT)) {
     return null;
