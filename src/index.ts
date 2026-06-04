@@ -21,7 +21,9 @@ export type { EthNetwork, GitSigner } from "./layers/chain";
 export { bootstrapRegistry, readOwnerRepos, readRegistryPage } from "./layers/repo";
 export { commitTableRef, readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
 export { loadBlob, loadTree, uploadBlob, uploadTree } from "./layers/storage";
-export { getGatewayUrls, setGatewayUrls, setNetwork } from "./layers/gateway";
+export { getGatewayUrls, setGatewayUrls } from "./layers/gateway";
+export { setNetwork } from "./layers/network";
+export type { NetworkToken, SolanaNetwork } from "./layers/network";
 export type { SessionSpeed } from "./layers/chain";
 
 // Re-export the solana-sdk speed dial so consumers can tune RPS / concurrency

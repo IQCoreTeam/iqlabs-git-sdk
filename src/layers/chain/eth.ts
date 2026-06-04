@@ -15,9 +15,15 @@
 import iqlabs from "@iqlabs-official/ethereum-sdk";
 import type { Signer as EthSigner } from "ethers";
 import { IQGIT_ROOT_ID } from "../../core/seed";
+import {
+  readCodeInViaGateway,
+  readRowsByNameViaGateway,
+  setEthGatewayNetwork,
+} from "../gateway";
 import type {
   ChainConfig,
   ChainOps,
+  EthNetwork,
   GitSigner,
   ReadOptions,
   Row,
@@ -29,6 +35,10 @@ interface EthTableRef {
   dbRootId: string;
   tableName: string;
 }
+
+// Active EVM network, set by init(). Reads pass it to the gateway and the
+// gateway pins non-default chains (monad) with `?network=`.
+let network: EthNetwork = "sepolia";
 
 function asEth(signer: GitSigner): EthSigner {
   return signer as EthSigner;
@@ -45,7 +55,9 @@ export const ethAdapter: ChainOps = {
 
   init(cfg: ChainConfig): void {
     if (cfg.chain !== "eth") return;
+    network = cfg.network;
     iqlabs.setNetwork(cfg.network, cfg.rpcUrl);
+    setEthGatewayNetwork(cfg.network);
   },
 
   async codeIn(
@@ -61,17 +73,21 @@ export const ethAdapter: ChainOps = {
   async readCodeIn(
     txHash: string,
   ): Promise<{ data: string | null; metadata: string }> {
+    const viaGateway = await readCodeInViaGateway(txHash, network);
+    if (viaGateway !== null) return viaGateway;
     const { data, metadata } = await iqlabs.reader.readCodeIn(txHash);
     return { data: data ?? null, metadata: JSON.stringify(metadata ?? {}) };
   },
 
   async readRows(hint: string, options?: ReadOptions): Promise<Row[]> {
-    // EVM reader currently supports `limit` only; `before` is a no-op here.
-    return toRows(await iqlabs.reader.readTableRows(IQGIT_ROOT_ID, hint, { limit: options?.limit }));
+    return this.readRowsByRef({ dbRootId: IQGIT_ROOT_ID, tableName: hint }, options);
   },
 
   async readRowsByRef(ref: TableRef, options?: ReadOptions): Promise<Row[]> {
     const { dbRootId, tableName } = ref as EthTableRef;
+    const viaGateway = await readRowsByNameViaGateway(dbRootId, tableName, network, options);
+    if (viaGateway !== null) return viaGateway;
+    // EVM reader currently supports `limit` only; `before` is a no-op here.
     return toRows(await iqlabs.reader.readTableRows(dbRootId, tableName, { limit: options?.limit }));
   },
 
