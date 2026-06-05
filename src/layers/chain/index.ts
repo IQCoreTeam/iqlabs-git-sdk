@@ -9,7 +9,7 @@
 // other's RPC.
 
 import { solanaAdapter } from "./solana";
-import { ethAdapter } from "./eth";
+import { ethAdapter } from "./eth-lazy";
 import type {
   ChainConfig,
   ChainOps,
