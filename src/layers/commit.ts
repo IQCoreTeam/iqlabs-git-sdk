@@ -5,12 +5,10 @@
 // "the most recent successful tx in this table = the latest commit", and we
 // read it as a single-row query (limit: 1).
 
-import type { Connection, PublicKey } from "@solana/web3.js";
-import { type SignerInput } from "@iqlabs-official/solana-sdk/utils";
-import { createTable, writeRow } from "@iqlabs-official/solana-sdk/writer";
-import { IQGIT_ROOT_ID, commitTableHint } from "../core/seed";
+import { commitTableHint } from "../core/seed";
 import type { Commit } from "../core/types";
 import * as chain from "./chain";
+import type { GitSigner, TableRef } from "./chain";
 import { notifyGateways } from "./gateway";
 
 const COMMIT_COLUMNS = [
@@ -27,25 +25,14 @@ const COMMIT_COLUMNS = [
  * it already exists.
  */
 export async function ensureCommitTable(
-  connection: Connection,
-  signer: SignerInput,
+  signer: GitSigner,
   repo: string,
 ): Promise<string | null> {
-  const hint = commitTableHint(signer.publicKey.toBase58(), repo);
-  if (await chain.accountExists(connection, chain.tablePda(hint))) return null;
-  return createTable(
-    connection,
-    signer,
-    IQGIT_ROOT_ID,
-    hint,
-    hint,
-    COMMIT_COLUMNS,
-    "id",
-    [],
-    undefined,
-    [signer.publicKey],
-    hint,
-  );
+  await chain.ensureDbRoot(signer);
+  const owner = await chain.signerAddress(signer);
+  const hint = commitTableHint(owner, repo);
+  if (await chain.tableExists(hint)) return null;
+  return chain.createTable(signer, hint, COMMIT_COLUMNS, "id", { writers: [owner] });
 }
 
 /**
@@ -57,42 +44,35 @@ export async function ensureCommitTable(
  * waiting for RPC sig indexing.
  */
 export async function writeCommit(
-  connection: Connection,
-  signer: SignerInput,
+  signer: GitSigner,
   repo: string,
   commit: Commit,
 ): Promise<string> {
-  const owner = signer.publicKey.toBase58();
+  const owner = await chain.signerAddress(signer);
   const hint = commitTableHint(owner, repo);
-  const sig = await writeRow(
-    connection,
-    signer,
-    IQGIT_ROOT_ID,
-    hint,
-    JSON.stringify(commit),
-  );
-  notifyGateways(chain.tablePda(hint).toBase58(), sig, commit, owner);
+  const sig = await chain.writeRow(signer, hint, JSON.stringify(commit));
+  notifyGateways(chain.tableKey(hint), sig, commit, owner);
   return sig;
 }
 
-/** The commit-table PDA for a repo. The one place owner/repo collapses to a
- *  PDA — every read keys off the PDA, so callers that have a PDA already (a
- *  .sol record, a dbroot match) skip this and pass it straight in. */
-export function commitTablePda(owner: string, repo: string): PublicKey {
-  return chain.tablePda(commitTableHint(owner, repo));
+/** The commit-table reference for a repo. The one place owner/repo collapses
+ *  to a chain handle — every read keys off it, so callers that already have a
+ *  ref (a .sol record, a dbroot match) skip this and pass it straight in. */
+export function commitTableRef(owner: string, repo: string): TableRef {
+  return chain.tableRef(commitTableHint(owner, repo));
 }
 
-/** Latest commit. Single-row, O(1) RPC path. */
-export async function readLatestCommit(pda: PublicKey): Promise<Commit | null> {
-  const rows = await chain.readRowsByPda(pda, { limit: 1 });
+/** Latest commit. Single-row, O(1) read path. */
+export async function readLatestCommit(ref: TableRef): Promise<Commit | null> {
+  const rows = await chain.readRowsByRef(ref, { limit: 1 });
   return (rows[0] as unknown as Commit) ?? null;
 }
 
 /** Full commit history, newest first. */
 export async function readCommitHistory(
-  pda: PublicKey,
+  ref: TableRef,
   options?: { limit?: number; before?: string },
 ): Promise<Commit[]> {
-  const rows = await chain.readRowsByPda(pda, options);
+  const rows = await chain.readRowsByRef(ref, options);
   return rows as unknown as Commit[];
 }

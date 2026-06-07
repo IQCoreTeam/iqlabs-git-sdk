@@ -9,10 +9,13 @@
 import type { Connection } from "@solana/web3.js";
 import { setRpcUrl } from "@iqlabs-official/solana-sdk";
 import type { SignerInput } from "@iqlabs-official/solana-sdk/utils";
+import type { Signer as EthSigner } from "ethers";
 import { sha256Hex } from "../core/hash";
 import { commitTableHint } from "../core/seed";
 import type { Commit, FileTree, Repository } from "../core/types";
 import * as chain from "./chain";
+import { initChain, setChain } from "./chain";
+import type { EthNetwork, GitSigner } from "./chain";
 import * as commitLayer from "./commit";
 import * as repoLayer from "./repo";
 import * as storage from "./storage";
@@ -31,28 +34,57 @@ export interface WriteEvent {
   row: object;
 }
 
-export interface GitClientConfig {
-  connection: Connection;
-  signer: SignerInput;
+/** Fields common to every chain's client config. */
+interface BaseClientConfig {
   /** Fires after each successful row write inside the SDK. Fire-and-forget
    *  callback for gateway notifies; throwing here will surface to the caller. */
   onWrite?: (event: WriteEvent) => void;
-  /** Default solana-sdk session speed for blob / tree uploads (`"light"` is
-   *  the per-operation default and works well on Helius free-tier RPCs).
-   *  Override per call with `commit({ speed })`. See `SESSION_SPEED_PROFILES`. */
+  /** Default session speed for blob / tree uploads (`"light"` is the per-op
+   *  default; Helius-friendly). EVM ignores it. Override per call with
+   *  `commit({ speed })`. See `SESSION_SPEED_PROFILES`. */
   speed?: chain.SessionSpeed;
 }
 
+/** Solana client: a web3.js `Connection` + a Solana signer. `chain` is
+ *  optional and defaults to `'solana'` so existing callers keep working. */
+export interface SolanaClientConfig extends BaseClientConfig {
+  chain?: "solana";
+  connection: Connection;
+  signer: SignerInput;
+}
+
+/** EVM client: an ethers `Signer` (carries its provider) + the target EVM
+ *  network. No `Connection`. */
+export interface EthClientConfig extends BaseClientConfig {
+  chain: "eth";
+  signer: EthSigner;
+  network: EthNetwork;
+  /** Optional RPC override; defaults to the network's public endpoint. */
+  rpcUrl?: string;
+}
+
+export type GitClientConfig = SolanaClientConfig | EthClientConfig;
+
 export class GitClient {
-  // CODE-RULES §3 — only one small shape; inlined rather than aliased.
+  /** The configured signer, as the chain-neutral union the layers consume. */
+  private readonly signer: GitSigner;
+
   constructor(private readonly cfg: GitClientConfig) {
-    // The solana-sdk reader path (readTableRows / readCodeIn → loadTree /
-    // readLatestCommit) does not take a Connection — it resolves a
-    // process-global one from env / setRpcUrl. Writes use `cfg.connection`,
-    // so without this reads could hit a different RPC (e.g. the mainnet-beta
-    // fallback when no env is set, as in a built browser bundle). Sync the
-    // reader's RPC to the connection the caller actually gave us.
-    setRpcUrl(cfg.connection.rpcEndpoint);
+    this.signer = cfg.signer;
+    if (cfg.chain === "eth") {
+      setChain("eth");
+      initChain({ chain: "eth", network: cfg.network, rpcUrl: cfg.rpcUrl });
+    } else {
+      setChain("solana");
+      initChain({ chain: "solana", connection: cfg.connection });
+      // The solana-sdk reader path (readTableRows / readCodeIn → loadTree /
+      // readLatestCommit) does not take a Connection — it resolves a
+      // process-global one from env / setRpcUrl. Writes use `cfg.connection`,
+      // so without this reads could hit a different RPC (e.g. the mainnet-beta
+      // fallback when no env is set, as in a built browser bundle). Sync the
+      // reader's RPC to the connection the caller actually gave us.
+      setRpcUrl(cfg.connection.rpcEndpoint);
+    }
   }
 
   /**
@@ -60,9 +92,8 @@ export class GitClient {
    * so the first `commit()` call doesn't need to pay createTable cost.
    */
   async createRepo(meta: Repository): Promise<void> {
-    const { connection, signer } = this.cfg;
-    const writes = await repoLayer.createRepo(connection, signer, meta);
-    await commitLayer.ensureCommitTable(connection, signer, meta.name);
+    const writes = await repoLayer.createRepo(this.signer, meta);
+    await commitLayer.ensureCommitTable(this.signer, meta.name);
     this.fireOnWrite(writes);
   }
 
@@ -79,18 +110,16 @@ export class GitClient {
     scan: Record<string, string>,
     options?: { speed?: chain.SessionSpeed },
   ): Promise<Commit> {
-    const { connection, signer } = this.cfg;
-    const owner = signer.publicKey.toBase58();
+    const owner = await chain.signerAddress(this.signer);
     const speed = options?.speed ?? this.cfg.speed;
 
-    const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
+    const latest = await commitLayer.readLatestCommit(commitLayer.commitTableRef(owner, repoName));
     const oldTree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
 
     const newTree: FileTree = {};
     for (const [path, content] of Object.entries(scan)) {
       newTree[path] = await storage.uploadBlob(
-        connection,
-        signer,
+        this.signer,
         path,
         content,
         oldTree,
@@ -99,7 +128,7 @@ export class GitClient {
       );
     }
 
-    const treeTxId = await storage.uploadTree(connection, signer, newTree, speed);
+    const treeTxId = await storage.uploadTree(this.signer, newTree, speed);
 
     const commit: Commit = {
       id: crypto.randomUUID(),
@@ -109,7 +138,7 @@ export class GitClient {
       timestamp: Date.now(),
       author: owner,
     };
-    const sig = await commitLayer.writeCommit(connection, signer, repoName, commit);
+    const sig = await commitLayer.writeCommit(this.signer, repoName, commit);
     this.fireOnWrite([{ tableHint: commitTableHint(owner, repoName), sig, row: commit }]);
     return commit;
   }
@@ -120,7 +149,7 @@ export class GitClient {
   private fireOnWrite(writes: Array<{ tableHint: string; sig: string; row: object }>) {
     if (!this.cfg.onWrite) return;
     for (const w of writes) {
-      const tablePda = chain.tablePda(w.tableHint).toBase58();
+      const tablePda = chain.tableKey(w.tableHint);
       this.cfg.onWrite({ tablePda, tableHint: w.tableHint, sig: w.sig, row: w.row });
     }
   }
@@ -136,15 +165,14 @@ export class GitClient {
     commitId: string | "latest",
     sink: (path: string, content: string) => Promise<void>,
   ): Promise<Commit> {
-    const { connection, signer } = this.cfg;
-    const owner = signer.publicKey.toBase58();
+    const owner = await chain.signerAddress(this.signer);
 
-    const pda = commitLayer.commitTablePda(owner, repoName);
+    const ref = commitLayer.commitTableRef(owner, repoName);
     let target: Commit | null;
     if (commitId === "latest") {
-      target = await commitLayer.readLatestCommit(pda);
+      target = await commitLayer.readLatestCommit(ref);
     } else {
-      const history = await commitLayer.readCommitHistory(pda);
+      const history = await commitLayer.readCommitHistory(ref);
       target = history.find((c) => c.id === commitId) ?? null;
     }
     if (!target) {
@@ -169,7 +197,7 @@ export class GitClient {
     owner: string,
     sink: (path: string, content: string) => Promise<void>,
   ): Promise<Commit> {
-    const target = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
+    const target = await commitLayer.readLatestCommit(commitLayer.commitTableRef(owner, repoName));
     if (!target) {
       throw new Error(`no commits in ${owner}/${repoName}`);
     }
@@ -187,7 +215,7 @@ export class GitClient {
     repoName: string,
     options?: { limit?: number; before?: string },
   ): Promise<Commit[]> {
-    return commitLayer.readCommitHistory(commitLayer.commitTablePda(owner, repoName), options);
+    return commitLayer.readCommitHistory(commitLayer.commitTableRef(owner, repoName), options);
   }
 
   /**
@@ -198,7 +226,7 @@ export class GitClient {
     repoName: string,
     scan: Record<string, string>,
   ): Promise<{ added: string[]; modified: string[]; unchanged: string[] }> {
-    const latest = await commitLayer.readLatestCommit(commitLayer.commitTablePda(owner, repoName));
+    const latest = await commitLayer.readLatestCommit(commitLayer.commitTableRef(owner, repoName));
     const tree: FileTree = latest ? await storage.loadTree(latest.treeTxId) : {};
 
     const added: string[] = [];

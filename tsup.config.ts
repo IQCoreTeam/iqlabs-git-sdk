@@ -14,5 +14,5 @@ export default defineConfig({
   clean: true,
   target: "es2022",
   treeshake: true,
-  splitting: false,
+  splitting: true,
 });

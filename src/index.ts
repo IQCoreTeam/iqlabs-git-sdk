@@ -11,11 +11,19 @@ export * from "./core/seed";
 // actually compute hashes without a platform entry they'll get a clear
 // "sha256 not installed" error from hash.ts.
 export { GitClient } from "./layers/client";
-export type { GitClientConfig, WriteEvent } from "./layers/client";
+export type {
+  EthClientConfig,
+  GitClientConfig,
+  SolanaClientConfig,
+  WriteEvent,
+} from "./layers/client";
+export type { EthNetwork, GitSigner, TableRef } from "./layers/chain";
 export { bootstrapRegistry, readOwnerRepos, readRegistryPage } from "./layers/repo";
-export { commitTablePda, readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
+export { commitTableRef, readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
 export { loadBlob, loadTree, uploadBlob, uploadTree } from "./layers/storage";
-export { getGatewayUrls, setGatewayUrls, setNetwork } from "./layers/gateway";
+export { getGatewayUrls, setGatewayUrls } from "./layers/gateway";
+export { setNetwork } from "./layers/network";
+export type { NetworkToken, SolanaNetwork } from "./layers/network";
 export type { SessionSpeed } from "./layers/chain";
 
 // Re-export the solana-sdk speed dial so consumers can tune RPS / concurrency
