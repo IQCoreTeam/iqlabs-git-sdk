@@ -29,6 +29,7 @@ export async function createRepo(
   signer: GitSigner,
   meta: Repository,
 ): Promise<Array<{ tableHint: string; sig: string; row: object }>> {
+  await chain.ensureDbRoot(signer);
   const owner = await chain.signerAddress(signer);
   const listHint = repoListHint(owner);
   const writes: Array<{ tableHint: string; sig: string; row: object }> = [];
@@ -42,6 +43,9 @@ export async function createRepo(
   notifyGateways(chain.tableKey(listHint), sig, meta, owner);
 
   if (meta.isPublic) {
+    if (!(await chain.tableExists(REGISTRY_HINT))) {
+      await chain.createTable(signer, REGISTRY_HINT, REGISTRY_COLUMNS, "owner");
+    }
     const entry: RegistryEntry = {
       owner,
       repo: meta.name,

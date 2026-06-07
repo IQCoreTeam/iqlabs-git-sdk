@@ -28,6 +28,7 @@ export async function ensureCommitTable(
   signer: GitSigner,
   repo: string,
 ): Promise<string | null> {
+  await chain.ensureDbRoot(signer);
   const owner = await chain.signerAddress(signer);
   const hint = commitTableHint(owner, repo);
   if (await chain.tableExists(hint)) return null;
