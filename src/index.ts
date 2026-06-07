@@ -21,6 +21,14 @@ export type { EthNetwork, GitSigner, TableRef } from "./layers/chain";
 export { bootstrapRegistry, readOwnerRepos, readRegistryPage } from "./layers/repo";
 export { commitTableRef, readCommitHistory, readLatestCommit, writeCommit } from "./layers/commit";
 export { loadBlob, loadTree, uploadBlob, uploadTree } from "./layers/storage";
+export {
+  deployPages,
+  isPagesDeployed,
+  listPagesDeployments,
+  pagesTableRef,
+  readPagesConfig,
+  readPagesProfile,
+} from "./layers/pages";
 export { getGatewayUrls, setGatewayUrls } from "./layers/gateway";
 export { setNetwork } from "./layers/network";
 export type { NetworkToken, SolanaNetwork } from "./layers/network";

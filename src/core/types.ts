@@ -36,3 +36,27 @@ export interface RegistryEntry {
   description: string;
   timestamp: number;
 }
+
+/** Deploy marker row stored in the `iqpages-root/deployed` gallery table. */
+export interface PagesDeployment {
+  id: string;
+  owner: string;
+  repo: string;
+  deployedAt: number;
+}
+
+/** `iqpages.json` — the deploy manifest a repo commits at its root. */
+export interface PagesConfig {
+  name: string;
+  version: string;
+  description: string;
+  entry: string;
+}
+
+/** `iqprofile.json` — optional profile/routing metadata for a deployed site. */
+export interface PagesProfile {
+  displayName: string;
+  description: string;
+  icon?: string;
+  routes?: { profile?: string; myPage?: string };
+}

@@ -100,10 +100,10 @@ export const ethAdapter: ChainOps = {
     return asEth(signer).getAddress();
   },
 
-  async ensureDbRoot(signer: GitSigner): Promise<string | null> {
+  async ensureDbRoot(signer: GitSigner, dbRootId = IQGIT_ROOT_ID): Promise<string | null> {
     // Idempotent at the SDK level — a revert (already initialized) maps to null.
     try {
-      return await iqlabs.writer.initializeDbRoot(asEth(signer), IQGIT_ROOT_ID);
+      return await iqlabs.writer.initializeDbRoot(asEth(signer), dbRootId);
     } catch {
       return null;
     }
@@ -114,13 +114,13 @@ export const ethAdapter: ChainOps = {
     hint: string,
     columns: string[],
     idColumn: string,
-    options?: { writers?: string[] },
+    options?: { writers?: string[]; dbRootId?: string },
   ): Promise<string | null> {
     // writers omitted ⇒ open table; array ⇒ restricted. isPrivate=false: git
     // tables are publicly readable. No gate / extKeys for the git namespace.
     return iqlabs.writer.createTable(
       asEth(signer),
-      IQGIT_ROOT_ID,
+      options?.dbRootId ?? IQGIT_ROOT_ID,
       hint,
       columns,
       idColumn,
@@ -131,20 +131,35 @@ export const ethAdapter: ChainOps = {
     );
   },
 
-  async writeRow(signer: GitSigner, hint: string, rowJson: string): Promise<string> {
-    return iqlabs.writer.writeRow(asEth(signer), IQGIT_ROOT_ID, hint, rowJson);
+  async writeRow(
+    signer: GitSigner,
+    hint: string,
+    rowJson: string,
+    dbRootId = IQGIT_ROOT_ID,
+  ): Promise<string> {
+    return iqlabs.writer.writeRow(asEth(signer), dbRootId, hint, rowJson);
   },
 
-  async tableExists(hint: string): Promise<boolean> {
+  async transferNative(
+    signer: GitSigner,
+    to: string,
+    amount: number | bigint,
+  ): Promise<string> {
+    // Native ETH transfer via ethers — no SDK wrapper needed. `value` is wei.
+    const tx = await asEth(signer).sendTransaction({ to, value: BigInt(amount) });
+    return (await tx.wait())!.hash;
+  },
+
+  async tableExists(hint: string, dbRootId = IQGIT_ROOT_ID): Promise<boolean> {
     try {
-      return (await iqlabs.reader.fetchTableMeta(IQGIT_ROOT_ID, hint)) != null;
+      return (await iqlabs.reader.fetchTableMeta(dbRootId, hint)) != null;
     } catch {
       return false;
     }
   },
 
-  tableRef(hint: string): TableRef {
-    return { dbRootId: IQGIT_ROOT_ID, tableName: hint } satisfies EthTableRef;
+  tableRef(hint: string, dbRootId = IQGIT_ROOT_ID): TableRef {
+    return { dbRootId, tableName: hint } satisfies EthTableRef;
   },
 
   tableKey(hint: string): string {

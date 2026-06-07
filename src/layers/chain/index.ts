@@ -85,8 +85,8 @@ export function signerAddress(signer: GitSigner): Promise<string> {
   return active.signerAddress(signer);
 }
 
-export function ensureDbRoot(signer: GitSigner): Promise<string | null> {
-  return active.ensureDbRoot(signer);
+export function ensureDbRoot(signer: GitSigner, dbRootId?: string): Promise<string | null> {
+  return active.ensureDbRoot(signer, dbRootId);
 }
 
 export function createTable(
@@ -94,23 +94,36 @@ export function createTable(
   hint: string,
   columns: string[],
   idColumn: string,
-  options?: { writers?: string[] },
+  options?: { writers?: string[]; dbRootId?: string },
 ): Promise<string | null> {
   return active.createTable(signer, hint, columns, idColumn, options);
 }
 
-export function writeRow(signer: GitSigner, hint: string, rowJson: string): Promise<string> {
-  return active.writeRow(signer, hint, rowJson);
+export function writeRow(
+  signer: GitSigner,
+  hint: string,
+  rowJson: string,
+  dbRootId?: string,
+): Promise<string> {
+  return active.writeRow(signer, hint, rowJson, dbRootId);
 }
 
-export function tableExists(hint: string): Promise<boolean> {
-  return active.tableExists(hint);
+export function transferNative(
+  signer: GitSigner,
+  to: string,
+  amount: number | bigint,
+): Promise<string> {
+  return active.transferNative(signer, to, amount);
 }
 
-export function tableRef(hint: string): TableRef {
-  return active.tableRef(hint);
+export function tableExists(hint: string, dbRootId?: string): Promise<boolean> {
+  return active.tableExists(hint, dbRootId);
 }
 
-export function tableKey(hint: string): string {
-  return active.tableKey(hint);
+export function tableRef(hint: string, dbRootId?: string): TableRef {
+  return active.tableRef(hint, dbRootId);
+}
+
+export function tableKey(hint: string, dbRootId?: string): string {
+  return active.tableKey(hint, dbRootId);
 }

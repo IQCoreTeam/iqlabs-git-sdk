@@ -77,8 +77,15 @@ async function signTx(signer: SignerInput, tx: Transaction): Promise<Transaction
   return (signer as WalletSigner).signTransaction(tx);
 }
 
-function tablePda(hint: string): PublicKey {
-  return getTablePda(DB_ROOT, toSeedBytes(hint));
+// DbRoot PDA for a given root id. The default `iq-git-v1` reuses the cached
+// `DB_ROOT` so iq-git derivation stays byte-identical; other roots (iq-pages)
+// derive on the fly.
+function dbRootPda(dbRootId: string): PublicKey {
+  return dbRootId === IQGIT_ROOT_ID ? DB_ROOT : getDbRootPda(toSeedBytes(dbRootId));
+}
+
+function tablePda(hint: string, dbRootId = IQGIT_ROOT_ID): PublicKey {
+  return getTablePda(dbRootPda(dbRootId), toSeedBytes(hint));
 }
 
 async function accountExists(pda: PublicKey): Promise<boolean> {
@@ -147,18 +154,19 @@ export const solanaAdapter: ChainOps = {
     return asSolana(signer).publicKey.toBase58();
   },
 
-  async ensureDbRoot(signer: GitSigner): Promise<string | null> {
+  async ensureDbRoot(signer: GitSigner, dbRootId = IQGIT_ROOT_ID): Promise<string | null> {
     const s = asSolana(signer);
-    if (await accountExists(DB_ROOT)) return null;
+    const rootPda = dbRootPda(dbRootId);
+    if (await accountExists(rootPda)) return null;
     const builder = createInstructionBuilder();
     const ix = initializeDbRootInstruction(
       builder,
       {
-        db_root: DB_ROOT,
+        db_root: rootPda,
         signer: s.publicKey,
         system_program: SystemProgram.programId,
       },
-      { db_root_id: DB_ROOT_SEED },
+      { db_root_id: toSeedBytes(dbRootId) },
     );
     const tx = new Transaction().add(ix);
     const c = conn();
@@ -176,7 +184,7 @@ export const solanaAdapter: ChainOps = {
     hint: string,
     columns: string[],
     idColumn: string,
-    options?: { writers?: string[] },
+    options?: { writers?: string[]; dbRootId?: string },
   ): Promise<string | null> {
     const s = asSolana(signer);
     // writers omitted ⇒ open table (registry); array ⇒ restricted writers.
@@ -184,7 +192,7 @@ export const solanaAdapter: ChainOps = {
     return sdkCreateTable(
       conn(),
       s,
-      IQGIT_ROOT_ID,
+      options?.dbRootId ?? IQGIT_ROOT_ID,
       hint,
       hint,
       columns,
@@ -196,19 +204,50 @@ export const solanaAdapter: ChainOps = {
     );
   },
 
-  async writeRow(signer: GitSigner, hint: string, rowJson: string): Promise<string> {
-    return sdkWriteRow(conn(), asSolana(signer), IQGIT_ROOT_ID, hint, rowJson);
+  async writeRow(
+    signer: GitSigner,
+    hint: string,
+    rowJson: string,
+    dbRootId = IQGIT_ROOT_ID,
+  ): Promise<string> {
+    return sdkWriteRow(conn(), asSolana(signer), dbRootId, hint, rowJson);
   },
 
-  async tableExists(hint: string): Promise<boolean> {
-    return accountExists(tablePda(hint));
+  async transferNative(
+    signer: GitSigner,
+    to: string,
+    amount: number | bigint,
+  ): Promise<string> {
+    const s = asSolana(signer);
+    const c = conn();
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: s.publicKey,
+        toPubkey: new PublicKey(to),
+        lamports: Number(amount),
+      }),
+    );
+    tx.feePayer = s.publicKey;
+    const { blockhash, lastValidBlockHeight } = await c.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    const signed = await signTx(s, tx);
+    const signature = await c.sendRawTransaction(signed.serialize());
+    await c.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
+    return signature;
   },
 
-  tableRef(hint: string): TableRef {
-    return tablePda(hint);
+  async tableExists(hint: string, dbRootId = IQGIT_ROOT_ID): Promise<boolean> {
+    return accountExists(tablePda(hint, dbRootId));
   },
 
-  tableKey(hint: string): string {
-    return tablePda(hint).toBase58();
+  tableRef(hint: string, dbRootId = IQGIT_ROOT_ID): TableRef {
+    return tablePda(hint, dbRootId);
+  },
+
+  tableKey(hint: string, dbRootId = IQGIT_ROOT_ID): string {
+    return tablePda(hint, dbRootId).toBase58();
   },
 };

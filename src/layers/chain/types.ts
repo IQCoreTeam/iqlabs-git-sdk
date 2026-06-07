@@ -99,9 +99,15 @@ export interface ChainOps {
   signerAddress(signer: GitSigner): Promise<string>;
 
   // ---- table writes ----
+  //
+  // `dbRootId` is optional on every root-bound method and defaults to
+  // `IQGIT_ROOT_ID` — omitting it keeps the iq-git callers (commit / repo /
+  // storage) byte-identical. The pages layer passes `IQPAGES_ROOT_ID` so it can
+  // target its own gallery DbRoot through the same seam, on either chain.
 
-  /** Initialize the `iq-git-v1` DbRoot if absent. Null when already present. */
-  ensureDbRoot(signer: GitSigner): Promise<string | null>;
+  /** Initialize a DbRoot if absent (defaults to `iq-git-v1`). Null when already
+   *  present. */
+  ensureDbRoot(signer: GitSigner, dbRootId?: string): Promise<string | null>;
 
   /** Create a table at `hint`. `writers` omitted ⇒ open (anyone can write);
    *  an array ⇒ restrict writes to those addresses. Null if already present. */
@@ -110,20 +116,32 @@ export interface ChainOps {
     hint: string,
     columns: string[],
     idColumn: string,
-    options?: { writers?: string[] },
+    options?: { writers?: string[]; dbRootId?: string },
   ): Promise<string | null>;
 
   /** Append a row (JSON string) to the table at `hint`. Returns the tx id. */
-  writeRow(signer: GitSigner, hint: string, rowJson: string): Promise<string>;
+  writeRow(
+    signer: GitSigner,
+    hint: string,
+    rowJson: string,
+    dbRootId?: string,
+  ): Promise<string>;
+
+  // ---- native currency ----
+
+  /** Transfer the chain's native currency (SOL lamports / EVM wei) to `to`.
+   *  `amount` is in base units — a `number` of lamports on Solana, a `bigint`
+   *  of wei on EVM. Returns the tx id. Used by the pages deploy fee. */
+  transferNative(signer: GitSigner, to: string, amount: number | bigint): Promise<string>;
 
   // ---- table identity ----
 
-  tableExists(hint: string): Promise<boolean>;
+  tableExists(hint: string, dbRootId?: string): Promise<boolean>;
 
   /** Resolve a hint to an opaque `TableRef` (Solana PDA / EVM coordinates). */
-  tableRef(hint: string): TableRef;
+  tableRef(hint: string, dbRootId?: string): TableRef;
 
   /** Gateway routing key for a hint — Solana PDA base58, EVM table name. Used
    *  by the notify path so gateways can hydrate their cache on write. */
-  tableKey(hint: string): string;
+  tableKey(hint: string, dbRootId?: string): string;
 }

@@ -73,8 +73,8 @@ export const ethAdapter: ChainOps = {
     return (await load()).signerAddress(signer);
   },
 
-  async ensureDbRoot(signer: GitSigner): Promise<string | null> {
-    return (await load()).ensureDbRoot(signer);
+  async ensureDbRoot(signer: GitSigner, dbRootId?: string): Promise<string | null> {
+    return (await load()).ensureDbRoot(signer, dbRootId);
   },
 
   async createTable(
@@ -82,22 +82,35 @@ export const ethAdapter: ChainOps = {
     hint: string,
     columns: string[],
     idColumn: string,
-    options?: { writers?: string[] },
+    options?: { writers?: string[]; dbRootId?: string },
   ): Promise<string | null> {
     return (await load()).createTable(signer, hint, columns, idColumn, options);
   },
 
-  async writeRow(signer: GitSigner, hint: string, rowJson: string): Promise<string> {
-    return (await load()).writeRow(signer, hint, rowJson);
+  async writeRow(
+    signer: GitSigner,
+    hint: string,
+    rowJson: string,
+    dbRootId?: string,
+  ): Promise<string> {
+    return (await load()).writeRow(signer, hint, rowJson, dbRootId);
   },
 
-  async tableExists(hint: string): Promise<boolean> {
-    return (await load()).tableExists(hint);
+  async transferNative(
+    signer: GitSigner,
+    to: string,
+    amount: number | bigint,
+  ): Promise<string> {
+    return (await load()).transferNative(signer, to, amount);
+  },
+
+  async tableExists(hint: string, dbRootId?: string): Promise<boolean> {
+    return (await load()).tableExists(hint, dbRootId);
   },
 
   // Sync — same coordinates the real adapter returns, no ethereum-sdk needed.
-  tableRef(hint: string): TableRef {
-    return { dbRootId: IQGIT_ROOT_ID, tableName: hint };
+  tableRef(hint: string, dbRootId = IQGIT_ROOT_ID): TableRef {
+    return { dbRootId, tableName: hint };
   },
 
   tableKey(hint: string): string {

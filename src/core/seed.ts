@@ -30,3 +30,45 @@ export function repoListHint(owner: string): string {
 export function commitTableHint(owner: string, repo: string): string {
   return `git_commits:${owner}:${repo}`;
 }
+
+// === iq-pages ===
+//
+// Pages lives in its OWN DbRoot ("iqpages-root"), not the iq-git one — the
+// gallery is a cross-owner registry with open writers, so it can't share
+// `iq-git-v1`'s per-owner table layout. The pages layer passes IQPAGES_ROOT_ID
+// to the chain seam (`chain.tableRef(hint, IQPAGES_ROOT_ID)`, etc.) rather than
+// relying on the adapters' default iq-git root.
+
+/** DbRoot id for the iq-pages deployment gallery. */
+export const IQPAGES_ROOT_ID = "iqpages-root";
+
+/** Single open-writers table that holds every deploy marker row. */
+export const IQPAGES_DEPLOYED_HINT = "deployed";
+
+/** One-time deploy fee on Solana, in lamports (0.2 SOL). */
+export const PAGES_FEE_LAMPORTS = 200_000_000;
+
+/** One-time deploy fee on EVM, in wei (0.01 ETH — value-matched to 0.2 SOL). */
+export const PAGES_FEE_WEI = 10_000_000_000_000_000n;
+
+/** Receiver of the Solana deploy fee. Same hard receiver the contract uses. */
+export const PAGES_FEE_RECIPIENT = "EWNSTD8tikwqHMcRNuuNbZrnYJUiJdKq9UXLXSEU4wZ1";
+
+/** Receiver of the EVM deploy fee — the same address the ethereum-sdk's
+ *  on-chain `feeReceiver()` resolves to across sepolia / monad / monadTestnet
+ *  (verified identical on all three). Pages fee is an app-layer transfer
+ *  outside the contract, so we send it to the protocol's fee wallet directly. */
+export const PAGES_FEE_RECIPIENT_EVM = "0xE94fA75aB69C18635A35556E9313e8D2aE009459";
+
+/** Config / profile filenames a repo must commit to be deployable. */
+export const IQPAGES_CONFIG_FILENAME = "iqpages.json";
+export const IQPAGES_PROFILE_FILENAME = "iqprofile.json";
+
+/**
+ * Deploy-marker row id.
+ * input:  owner wallet address, repo name
+ * output: "<owner>:<repo>"
+ */
+export function pagesDeployId(owner: string, repo: string): string {
+  return `${owner}:${repo}`;
+}
