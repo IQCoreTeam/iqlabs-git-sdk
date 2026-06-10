@@ -40,7 +40,7 @@ export async function createRepo(
 
   const sig = await chain.writeRow(signer, listHint, JSON.stringify(meta));
   writes.push({ tableHint: listHint, sig, row: meta });
-  notifyGateways(chain.tableKey(listHint), sig, meta, owner);
+  await notifyGateways(chain.tableKey(listHint), sig, meta, owner);
 
   if (meta.isPublic) {
     if (!(await chain.tableExists(REGISTRY_HINT))) {
@@ -54,7 +54,7 @@ export async function createRepo(
     };
     const regSig = await chain.writeRow(signer, REGISTRY_HINT, JSON.stringify(entry));
     writes.push({ tableHint: REGISTRY_HINT, sig: regSig, row: entry });
-    notifyGateways(chain.tableKey(REGISTRY_HINT), regSig, entry, owner);
+    await notifyGateways(chain.tableKey(REGISTRY_HINT), regSig, entry, owner);
   }
 
   return writes;

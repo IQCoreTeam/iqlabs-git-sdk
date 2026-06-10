@@ -149,23 +149,53 @@ export async function readCodeInViaGateway(
   );
 }
 
-/** Fire-and-forget /notify after a successful write. Includes the row body so
- *  the gateway can inject without an RPC roundtrip. Errors are swallowed — the
- *  row is already on-chain, gateway hydration is opportunistic. */
-export function notifyGateways(
+/** Hit every gateway's /notify after a successful write so it injects the new
+ *  row into its head-page cache without waiting on RPC sig indexing. Includes
+ *  the row body so the gateway skips the RPC roundtrip.
+ *
+ *  Awaitable: resolves once all gateways have responded (or timed out). Errors
+ *  are swallowed — the row is already on-chain, gateway hydration is
+ *  opportunistic — but the caller CAN await this to guarantee the notify
+ *  actually goes out before a short-lived process (e.g. a CLI) exits. Each
+ *  request is bounded by REQ_TIMEOUT_MS so a dead gateway can't hang the write.
+ */
+export async function notifyGateways(
   tableKey: string,
   txSig: string,
   row: object,
   signer: string,
-): void {
+): Promise<void> {
   const network = activeChain === "eth" ? ethNetwork : undefined;
   const body = JSON.stringify({ txSignature: txSig, row, signer, network });
   const suffix = network ? `?network=${network}` : "";
-  for (const gw of getGatewayUrls()) {
-    fetch(`${gw}/table/${tableKey}/notify${suffix}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-    }).catch(() => {});
-  }
+  await Promise.allSettled(
+    getGatewayUrls().map((gw) =>
+      fetch(`${gw}/table/${tableKey}/notify${suffix}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(REQ_TIMEOUT_MS),
+      }).catch(() => {}),
+    ),
+  );
+}
+
+/** Force every gateway to drop its cached head page for a table by issuing a
+ *  `?fresh=true` read — the gateway re-fetches from chain and re-seeds its
+ *  cache, so the NEXT plain (cached) read by anyone (e.g. browser.iqlabs.dev)
+ *  sees the just-written row. Pairs with notifyGateways on the write side:
+ *  notify prepends the row optimistically, fresh re-reads against RPC. Together
+ *  the next reader gets the new row regardless of RPC indexing lag or which
+ *  gateway it happens to hit. Best-effort + bounded; never throws. */
+export async function bustTableCache(tableKey: string): Promise<void> {
+  const network = activeChain === "eth" ? ethNetwork : undefined;
+  const qs = new URLSearchParams({ fresh: "true" });
+  if (network) qs.set("network", network);
+  await Promise.allSettled(
+    getGatewayUrls().map((gw) =>
+      fetch(`${gw}/table/${tableKey}/rows?${qs}`, {
+        signal: AbortSignal.timeout(REQ_TIMEOUT_MS),
+      }).catch(() => {}),
+    ),
+  );
 }

@@ -27,6 +27,7 @@ import {
   PAGES_FEE_RECIPIENT,
   PAGES_FEE_RECIPIENT_EVM,
   PAGES_FEE_WEI,
+  commitTableHint,
   pagesDeployId,
 } from "../core/seed";
 import type {
@@ -35,7 +36,7 @@ import type {
   PagesProfile,
 } from "../core/types";
 import { commitTableRef, readLatestCommit } from "./commit";
-import { notifyGateways } from "./gateway";
+import { bustTableCache, notifyGateways } from "./gateway";
 import { loadBlob, loadTree } from "./storage";
 
 const DEPLOYED_COLUMNS = ["id", "owner", "repo", "deployedAt"];
@@ -90,6 +91,19 @@ export async function readPagesConfig(
   return readJsonFromLatest<PagesConfig>(owner, repo, IQPAGES_CONFIG_FILENAME);
 }
 
+/** readPagesConfig against a guaranteed-fresh view. The repo's commit table
+ *  may be cached at the gateway (a caller that just pushed iqpages.json in the
+ *  same run would otherwise read a pre-push head), so bust that cache once —
+ *  forcing a cold RPC read — then read. One shot: if the manifest still isn't
+ *  there, it genuinely isn't committed yet, and deploy fails cleanly. */
+async function readPagesConfigFresh(
+  owner: string,
+  repo: string,
+): Promise<PagesConfig | null> {
+  await bustTableCache(chain.tableKey(commitTableHint(owner, repo)));
+  return readPagesConfig(owner, repo);
+}
+
 /** `iqprofile.json` from the repo's latest commit, or null if not committed. */
 export async function readPagesProfile(
   owner: string,
@@ -140,8 +154,11 @@ export async function deployPages(
   }
 
   // Sanity-check the manifest before charging — keeps the gallery free of
-  // broken links.
-  const config = await readPagesConfig(owner, repo);
+  // broken links. Reads the repo's LATEST commit through a freshly-busted
+  // cache: a caller (e.g. the CLI) that just pushed iqpages.json in the same
+  // run would otherwise hit a pre-push cached head and get a misleading
+  // "commit it first".
+  const config = await readPagesConfigFresh(owner, repo);
   if (!config) {
     throw new Error(
       `${IQPAGES_CONFIG_FILENAME} missing in ${repo}. Commit it first, then deploy.`,
@@ -162,7 +179,17 @@ export async function deployPages(
     JSON.stringify(row),
     IQPAGES_ROOT_ID,
   );
-  notifyGateways(pagesTableKey(), sig, row, owner);
+  // Make the deploy visible to readers (browser.iqlabs.dev) immediately, with
+  // no change needed on the read side. Two tables decide whether a site shows:
+  // the gallery ("is this deployed?") and the repo's commit table ("what's the
+  // latest treeTxId?"). For each we notify (optimistic row inject) AND fresh
+  // (force the gateway to re-seed its cache from chain) so the next plain cached
+  // read returns the new state regardless of RPC indexing lag or which gateway
+  // the reader hits. Awaited so a short-lived CLI can't exit first.
+  const galleryKey = pagesTableKey();
+  const commitKey = chain.tableKey(commitTableHint(owner, repo));
+  await notifyGateways(galleryKey, sig, row, owner);
+  await Promise.allSettled([bustTableCache(galleryKey), bustTableCache(commitKey)]);
 
   await chargeFee(signer);
 

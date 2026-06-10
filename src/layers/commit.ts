@@ -39,9 +39,11 @@ export async function ensureCommitTable(
  * Append one commit row. Callers (workflow-level code) are responsible for
  * setting parentCommitId — the SDK does not auto-chain.
  *
- * After the row lands on-chain, fires a best-effort /notify so any
+ * After the row lands on-chain, awaits a best-effort /notify so any
  * iq-gateway already caching this table prepends the new commit without
- * waiting for RPC sig indexing.
+ * waiting for RPC sig indexing. Awaited (not fire-and-forget) so a short-lived
+ * caller like the CLI can't exit before the notify goes out — otherwise the
+ * gateway keeps serving a stale head page until its TTL lapses.
  */
 export async function writeCommit(
   signer: GitSigner,
@@ -51,7 +53,7 @@ export async function writeCommit(
   const owner = await chain.signerAddress(signer);
   const hint = commitTableHint(owner, repo);
   const sig = await chain.writeRow(signer, hint, JSON.stringify(commit));
-  notifyGateways(chain.tableKey(hint), sig, commit, owner);
+  await notifyGateways(chain.tableKey(hint), sig, commit, owner);
   return sig;
 }
 
