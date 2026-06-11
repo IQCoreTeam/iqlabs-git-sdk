@@ -9,7 +9,7 @@ import { commitTableHint } from "../core/seed";
 import type { Commit } from "../core/types";
 import * as chain from "./chain";
 import type { GitSigner, TableRef } from "./chain";
-import { notifyGateways } from "./gateway";
+import { bustTableCache, notifyGateways } from "./gateway";
 
 const COMMIT_COLUMNS = [
   "id",
@@ -39,12 +39,24 @@ export async function ensureCommitTable(
  * Append one commit row. Callers (workflow-level code) are responsible for
  * setting parentCommitId — the SDK does not auto-chain.
  *
- * After the row lands on-chain, awaits a best-effort /notify so any
- * iq-gateway already caching this table prepends the new commit without
- * waiting for RPC sig indexing. Awaited (not fire-and-forget) so a short-lived
- * caller like the CLI can't exit before the notify goes out — otherwise the
- * gateway keeps serving a stale head page until its TTL lapses.
+ * After the row lands on-chain we refresh every gateway's cache for this table,
+ * awaited so a short-lived caller (the CLI) can't exit first:
+ *   - notify injects the new row into the head-page cache (limits 5/10/20/50/100).
+ *   - bust forces a ?fresh re-seed. This is what makes a re-commit visible to
+ *     browser.iqlabs.dev: the site resolver reads `limit=1` for the latest
+ *     treeTxId, and notify's prepend does NOT cover limit=1, so without the bust
+ *     the resolver keeps seeing the OLD treeTxId (and renders the old site) until
+ *     the 60s TTL lapses. Everything else in the render path is keyed by the new
+ *     immutable treeTxId, so this one table is the only stale point.
  */
+
+// The wide-web site resolver scans the commit table's newest rows to find the
+// latest one signed by the repo owner, reading `?limit=20` (its COMMIT_SCAN_LIMIT
+// in iq-wide-web/src/lib/iqpages/latest-commit.ts). The gateway keys its row
+// cache per (pda, limit), so we must re-seed THAT limit for a re-commit to show
+// up. Keep these two in sync. Exported so the pages layer re-seeds the same key.
+export const SITE_RESOLVER_SCAN_LIMIT = 20;
+
 export async function writeCommit(
   signer: GitSigner,
   repo: string,
@@ -52,8 +64,16 @@ export async function writeCommit(
 ): Promise<string> {
   const owner = await chain.signerAddress(signer);
   const hint = commitTableHint(owner, repo);
+  const tableKey = chain.tableKey(hint);
   const sig = await chain.writeRow(signer, hint, JSON.stringify(commit));
-  await notifyGateways(chain.tableKey(hint), sig, commit, owner);
+  await notifyGateways(tableKey, sig, commit, owner);
+  // Re-seed the exact limit the wide-web site resolver reads (20). notify's
+  // prepend does cover limit=20, but only when a head entry already exists; the
+  // bust guarantees a re-commit is visible even on a cold/expired cache. Targets
+  // just this one (pda, limit) rather than blanket-clearing the table. (manifest
+  // + file blobs are keyed by the new immutable treeTxId and cache-miss into a
+  // fresh read on their own — nothing to bust there.)
+  await bustTableCache(tableKey, SITE_RESOLVER_SCAN_LIMIT);
   return sig;
 }
 

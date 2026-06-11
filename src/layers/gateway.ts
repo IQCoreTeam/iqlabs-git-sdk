@@ -180,16 +180,22 @@ export async function notifyGateways(
   );
 }
 
-/** Force every gateway to drop its cached head page for a table by issuing a
- *  `?fresh=true` read — the gateway re-fetches from chain and re-seeds its
+/** Force every gateway to re-seed its cached head page for a table by issuing a
+ *  `?fresh=true` read — the gateway re-fetches from chain and overwrites its
  *  cache, so the NEXT plain (cached) read by anyone (e.g. browser.iqlabs.dev)
  *  sees the just-written row. Pairs with notifyGateways on the write side:
- *  notify prepends the row optimistically, fresh re-reads against RPC. Together
- *  the next reader gets the new row regardless of RPC indexing lag or which
- *  gateway it happens to hit. Best-effort + bounded; never throws. */
-export async function bustTableCache(tableKey: string): Promise<void> {
+ *  notify prepends the row optimistically (head limits 5/10/20/50/100), fresh
+ *  re-reads against RPC. Together the next reader gets the new row regardless of
+ *  RPC indexing lag or which gateway it hits.
+ *
+ *  `limit` MUST match the limit the reader queries with: the gateway keys its
+ *  row cache by (pda, limit, before), so busting `limit=50` does nothing for a
+ *  reader that fetches `limit=1`. Pass the reader's limit (the site resolver
+ *  reads the commit table at limit=1; the pages gallery is read at limit=1000).
+ *  Best-effort + bounded; never throws. */
+export async function bustTableCache(tableKey: string, limit: number): Promise<void> {
   const network = activeChain === "eth" ? ethNetwork : undefined;
-  const qs = new URLSearchParams({ fresh: "true" });
+  const qs = new URLSearchParams({ fresh: "true", limit: String(limit) });
   if (network) qs.set("network", network);
   await Promise.allSettled(
     getGatewayUrls().map((gw) =>

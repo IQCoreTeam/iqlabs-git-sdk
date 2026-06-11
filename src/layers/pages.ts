@@ -35,7 +35,7 @@ import type {
   PagesDeployment,
   PagesProfile,
 } from "../core/types";
-import { commitTableRef, readLatestCommit } from "./commit";
+import { SITE_RESOLVER_SCAN_LIMIT, commitTableRef, readLatestCommit } from "./commit";
 import { bustTableCache, notifyGateways } from "./gateway";
 import { loadBlob, loadTree } from "./storage";
 
@@ -100,7 +100,8 @@ async function readPagesConfigFresh(
   owner: string,
   repo: string,
 ): Promise<PagesConfig | null> {
-  await bustTableCache(chain.tableKey(commitTableHint(owner, repo)));
+  // readPagesConfig reads the latest commit (limit=1), so bust that exact key.
+  await bustTableCache(chain.tableKey(commitTableHint(owner, repo)), 1);
   return readPagesConfig(owner, repo);
 }
 
@@ -186,10 +187,16 @@ export async function deployPages(
   // (force the gateway to re-seed its cache from chain) so the next plain cached
   // read returns the new state regardless of RPC indexing lag or which gateway
   // the reader hits. Awaited so a short-lived CLI can't exit first.
+  // Re-seed the exact limits the wide-web site resolver reads with: the gallery
+  // at limit=1000 ("is this deployed?") and the commit table at SITE_RESOLVER_
+  // SCAN_LIMIT (latest owner-signed commit → treeTxId it renders from).
   const galleryKey = pagesTableKey();
   const commitKey = chain.tableKey(commitTableHint(owner, repo));
   await notifyGateways(galleryKey, sig, row, owner);
-  await Promise.allSettled([bustTableCache(galleryKey), bustTableCache(commitKey)]);
+  await Promise.allSettled([
+    bustTableCache(galleryKey, 1000),
+    bustTableCache(commitKey, SITE_RESOLVER_SCAN_LIMIT),
+  ]);
 
   await chargeFee(signer);
 
